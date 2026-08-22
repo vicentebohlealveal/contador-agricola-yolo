@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>ContaFrutos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#0A0A0A; --panel:#161616; --line:#2A2A2A; --text:#EDEDED; --dim:#8C8C8C; --danger:#C6553A; }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; padding-bottom:48px;}
+  .wrap{max-width:480px;margin:0 auto;padding:22px 18px 0;}
+  header{display:flex;align-items:center;gap:10px;margin-bottom:18px;min-height:30px;}
+  .back-btn{background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:0 4px 0 0;line-height:1;}
+  h1{font-weight:600;font-size:19px;margin:0;letter-spacing:-0.01em;flex:1;}
+
+  .list-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);}
+  .list-row .name{flex:1;font-size:15px;font-weight:500;cursor:pointer;}
+  .list-row .meta{font-size:12px;color:var(--dim);margin-top:2px;}
+  .list-row .thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;border:1px solid var(--line);flex-shrink:0;}
+  .del-btn{background:none;border:none;color:var(--dim);font-size:16px;cursor:pointer;padding:2px 4px;flex-shrink:0;}
+
+  .add-row{display:flex;gap:8px;padding:14px 4px 4px;}
+  .add-row input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;font-family:'Inter';outline:none;}
+  .add-row input:focus{border-color:var(--dim);}
+  .add-row button{background:var(--text);color:#000;border:none;border-radius:8px;padding:0 16px;font-weight:600;font-size:13.5px;cursor:pointer;}
+
+  .empty{font-size:13px;color:var(--dim);text-align:center;padding:24px 10px;border:1px solid var(--line);border-radius:8px;margin-top:4px;}
+
+  .photo-btn{margin-top:4px;width:100%;background:var(--text);color:#000;border:none;border-radius:8px;font-weight:600;font-size:15px;padding:16px;cursor:pointer;}
+  .photo-btn:active{opacity:.85;}
+
+  .avg-box{margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;}
+  .avg-label{font-size:12px;color:var(--dim);}
+  .avg-value{font-size:34px;font-weight:700;margin-top:2px;}
+  .avg-sub{font-size:11.5px;color:var(--dim);margin-top:4px;}
+
+  details.adjust{margin-top:20px;border:1px solid var(--line);border-radius:8px;padding:2px 14px;}
+  details.adjust summary{font-size:12.5px;color:var(--dim);padding:12px 0;cursor:pointer;}
+  .adjust-note{font-size:11.5px;color:var(--dim);line-height:1.4;margin-bottom:10px;}
+  .slider-row{margin:12px 0;}
+  .slider-row label{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:5px;}
+  .slider-row input[type=range]{width:100%;accent-color:var(--text);}
+  .reset-defaults{background:none;border:1px solid var(--line);color:var(--text);font-size:12px;padding:7px 11px;border-radius:6px;cursor:pointer;margin:6px 0 12px;}
+
+  input[type=file]{display:none;}
+
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:flex-end;justify-content:center;z-index:50;}
+  .overlay.show{display:flex;}
+  .sheet{background:var(--panel);border:1px solid var(--line);border-radius:14px 14px 0 0;width:100%;max-width:480px;padding:18px;max-height:85vh;overflow-y:auto;}
+  .sheet-title{font-size:13px;color:var(--dim);margin-bottom:10px;}
+  .sheet canvas{width:100%;border-radius:8px;background:#000;display:block;}
+  .sheet-count{font-size:44px;font-weight:700;margin:14px 0 4px;}
+  .sheet-note{font-size:12px;color:var(--dim);margin-bottom:14px;}
+  .sheet-actions{display:flex;gap:8px;}
+  .sheet-actions button{flex:1;padding:12px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--text);font-family:'Inter';font-weight:500;font-size:13.5px;cursor:pointer;}
+  .sheet-actions button.primary{background:var(--text);color:#000;border-color:var(--text);}
+  .sheet-mask-toggle{background:none;border:1px solid var(--line);color:var(--dim);font-size:11.5px;padding:6px 10px;border-radius:6px;cursor:pointer;margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <button class="back-btn" id="btnBack" style="display:none">←</button>
+    <h1 id="pageTitle">Conteo</h1>
+  </header>
+
+  <div id="homeView">
+    <div id="speciesList"></div>
+    <div class="add-row">
+      <input type="text" id="newSpeciesName" placeholder="Nueva especie (ej: Limones)">
+      <button id="btnAddSpecies">Añadir</button>
+    </div>
+  </div>
+
+  <div id="speciesView" style="display:none">
+    <button class="photo-btn" id="btnNewTreePhoto">📷 Foto de árbol nuevo</button>
+
+    <div id="treeList" style="margin-top:6px"></div>
+
+    <div class="avg-box">
+      <div class="avg-label">Frutos promedio total</div>
+      <div class="avg-value" id="avgValue">—</div>
+      <div class="avg-sub" id="avgSub"></div>
+    </div>
+
+    <details class="adjust">
+      <summary>Ajustar detección</summary>
+      <div class="adjust-note">Se aplica a todas las fotos, de cualquier especie. Sirve para afinar si cuenta de más o de menos.</div>
+      <div class="slider-row"><label><span>Tono mínimo</span><span id="lblHueMin">40</span></label><input type="range" id="hueMin" min="0" max="360" value="40"></div>
+      <div class="slider-row"><label><span>Tono máximo</span><span id="lblHueMax">75</span></label><input type="range" id="hueMax" min="0" max="360" value="75"></div>
+      <div class="slider-row"><label><span>Saturación mínima</span><span id="lblSat">35</span></label><input type="range" id="satMin" min="0" max="100" value="35"></div>
+      <div class="slider-row"><label><span>Brillo mínimo</span><span id="lblVal">30</span></label><input type="range" id="valMin" min="0" max="100" value="30"></div>
+      <div class="slider-row"><label><span>Tamaño mínimo del fruto</span><span id="lblSize">0.4%</span></label><input type="range" id="sizeMin" min="1" max="50" value="4"></div>
+      <div class="slider-row"><label><span>Redondez mínima</span><span id="lblRound">50%</span></label><input type="range" id="roundMin" min="20" max="90" value="50"></div>
+      <button class="reset-defaults" id="btnResetSliders">Restablecer valores por defecto</button>
+    </details>
+  </div>
+</div>
+
+<input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <div class="sheet-title" id="sheetTitle">Resultado</div>
+    <canvas id="sheetCanvas"></canvas>
+    <button class="sheet-mask-toggle" id="btnMaskToggle">Ver máscara</button>
+    <div class="sheet-count" id="sheetCount">0</div>
+    <div class="sheet-note">Frutos detectados. Si no coincide con lo que ves, ajustá la detección y repetí la foto.</div>
+    <div class="sheet-actions">
+      <button id="btnRetake">Repetir foto</button>
+      <button class="primary" id="btnSaveCount">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---------------- data model ----------------
+// data.species = [{id,name,trees:[{id,name,count,thumb,ts}]}]
+// settings (global, applies to every photo regardless of species)
+const DEFAULT_SETTINGS = {hueMin:330, hueMax:70, satMin:35, valMin:30, sizeMin:4, roundMin:50};
+
+function loadData(){
+  try{ return JSON.parse(localStorage.getItem('contafrutos-data') || '{"species":[]}'); }
+  catch(e){ return {species:[]}; }
+}
+function saveData(data){
+  try{ localStorage.setItem('contafrutos-data', JSON.stringify(data)); }
+  catch(e){ console.error('storage error', e); }
+}
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem('contafrutos-settings');
+    return raw ? JSON.parse(raw) : Object.assign({}, DEFAULT_SETTINGS);
+  }catch(e){ return Object.assign({}, DEFAULT_SETTINGS); }
+}
+function saveSettings(s){
+  try{ localStorage.setItem('contafrutos-settings', JSON.stringify(s)); }
+  catch(e){ console.error('storage error', e); }
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+let data = loadData();
+let settings = loadSettings();
+let currentSpeciesId = null;
+let pendingImg = null;
+let pendingResult = null; // {count, circCanvas, maskCanvas, w, h}
+let showingMask = false;
+
+// ---------------- navigation ----------------
+function goHome(){
+  currentSpeciesId = null;
+  $('homeView').style.display='block'; $('speciesView').style.display='none';
+  $('btnBack').style.display='none'; $('pageTitle').textContent='Conteo';
+  renderHome();
+}
+function goSpecies(id){
+  currentSpeciesId = id;
+  $('homeView').style.display='none'; $('speciesView').style.display='block';
+  $('btnBack').style.display='inline-block';
+  const sp = getSpecies(id);
+  $('pageTitle').textContent = sp.name;
+  applySlidersFromSettings();
+  renderSpecies();
+}
+$('btnBack').addEventListener('click', goHome);
+function getSpecies(id){ return data.species.find(s=>s.id===id); }
+
+// ---------------- home: species list ----------------
+function renderHome(){
+  const list = $('speciesList');
+  if(data.species.length===0){ list.innerHTML = '<div class="empty">Todavía no agregaste ninguna especie</div>'; return; }
+  list.innerHTML='';
+  data.species.forEach(sp=>{
+    const counts = sp.trees.filter(t=>t.count!=null).map(t=>t.count);
+    const avg = counts.length ? (counts.reduce((a,b)=>a+b,0)/counts.length) : null;
+    const row = document.createElement('div'); row.className='list-row';
+    row.innerHTML = `
+      <div class="name">${escapeHtml(sp.name)}
+        <div class="meta">${sp.trees.length} árbol${sp.trees.length===1?'':'es'}${avg!=null ? ' · promedio '+round1(avg) : ''}</div>
+      </div>
+      <button class="del-btn" data-id="${sp.id}">✕</button>`;
+    row.querySelector('.name').addEventListener('click', ()=> goSpecies(sp.id));
+    row.querySelector('.del-btn').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(!confirm(`¿Borrar "${sp.name}" y todos sus árboles?`)) return;
+      data.species = data.species.filter(s=>s.id!==sp.id);
+      saveData(data); renderHome();
+    });
+    list.appendChild(row);
+  });
+}
+$('btnAddSpecies').addEventListener('click', ()=>{
+  const input = $('newSpeciesName');
+  const name = input.value.trim();
+  if(!name) return;
+  data.species.push({id:uid(), name, trees:[]});
+  saveData(data); input.value=''; renderHome();
+});
+$('newSpeciesName').addEventListener('keydown', e=>{ if(e.key==='Enter') $('btnAddSpecies').click(); });
+
+// ---------------- species view: tree list ----------------
+function renderSpecies(){
+  const sp = getSpecies(currentSpeciesId);
+  const list = $('treeList');
+  if(sp.trees.length===0){ list.innerHTML = '<div class="empty">Sacá la primera foto de un árbol con el botón de arriba</div>'; }
+  else{
+    list.innerHTML='';
+    // most recent tree first
+    [...sp.trees].reverse().forEach(tree=>{
+      const row = document.createElement('div'); row.className='list-row';
+      row.innerHTML = `
+        <img class="thumb" src="${tree.thumb}">
+        <div class="name" style="cursor:default">${escapeHtml(tree.name)}
+          <div class="meta">${tree.count} frutos</div>
+        </div>
+        <button class="del-btn" data-id="${tree.id}">✕</button>`;
+      row.querySelector('.del-btn').addEventListener('click', ()=>{
+        if(!confirm(`¿Borrar "${tree.name}"?`)) return;
+        sp.trees = sp.trees.filter(t=>t.id!==tree.id);
+        saveData(data); renderSpecies();
+      });
+      list.appendChild(row);
+    });
+  }
+  const counts = sp.trees.map(t=>t.count);
+  if(counts.length){
+    const avg = counts.reduce((a,b)=>a+b,0)/counts.length;
+    $('avgValue').textContent = round1(avg);
+    $('avgSub').textContent = `sobre ${counts.length} árbol${counts.length===1?'':'es'} fotografiado${counts.length===1?'':'s'}`;
+  } else {
+    $('avgValue').textContent = '—';
+    $('avgSub').textContent = 'sacá al menos una foto para calcular el promedio';
+  }
+}
+
+// ---------------- detection settings sliders (global) ----------------
+function applySlidersFromSettings(){
+  $('hueMin').value=settings.hueMin; $('hueMax').value=settings.hueMax; $('satMin').value=settings.satMin;
+  $('valMin').value=settings.valMin; $('sizeMin').value=settings.sizeMin; $('roundMin').value=settings.roundMin;
+  refreshSliderLabels();
+}
+['hueMin','hueMax','satMin','valMin','sizeMin','roundMin'].forEach(id=>{
+  $(id).addEventListener('input', ()=>{
+    refreshSliderLabels();
+    settings[id] = +$(id).value;
+    saveSettings(settings);
+  });
+});
+function refreshSliderLabels(){
+  $('lblHueMin').textContent = $('hueMin').value;
+  $('lblHueMax').textContent = $('hueMax').value;
+  $('lblSat').textContent = $('satMin').value;
+  $('lblVal').textContent = $('valMin').value;
+  $('lblSize').textContent = (parseFloat($('sizeMin').value)/10).toFixed(1) + '%';
+  $('lblRound').textContent = $('roundMin').value + '%';
+}
+$('btnResetSliders').addEventListener('click', ()=>{
+  settings = Object.assign({}, DEFAULT_SETTINGS);
+  saveSettings(settings); applySlidersFromSettings();
+});
+
+// ---------------- capture + analysis ----------------
+$('btnNewTreePhoto').addEventListener('click', ()=> $('cameraInput').click());
+$('cameraInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const img = new Image();
+    img.onload = ()=>{ pendingImg = img; runAnalysis(); };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  $('cameraInput').value='';
+});
+
+function runAnalysis(){
+  const img = pendingImg;
+  const maxDim = 560;
+  const ratio = Math.min(1, maxDim/Math.max(img.width,img.height));
+  const w = Math.round(img.width*ratio), h = Math.round(img.height*ratio);
+  const canvas = document.createElement('canvas'); canvas.width=w; canvas.height=h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img,0,0,w,h);
+  const imgData = ctx.getImageData(0,0,w,h);
+  const px = imgData.data;
+
+  const hueMin=settings.hueMin, hueMax=settings.hueMax, satMin=settings.satMin, valMin=settings.valMin;
+  const sizeMinPct = settings.sizeMin/10/100;
+  const roundMin = settings.roundMin/100;
+
+  const n = w*h;
+  let mask = new Uint8Array(n);
+  for(let i=0;i<n;i++){
+    const o=i*4;
+    const [hh,ss,vv] = rgbToHsv(px[o],px[o+1],px[o+2]);
+    if(hueInRange(hh,hueMin,hueMax) && ss>=satMin && vv>=valMin) mask[i]=1;
+  }
+  mask = erode3x3(mask,w,h); mask = dilate3x3(mask,w,h);
+
+  const maskCanvas = document.createElement('canvas'); maskCanvas.width=w; maskCanvas.height=h;
+  const mctx = maskCanvas.getContext('2d');
+  const maskImg = mctx.createImageData(w,h);
+  for(let i=0;i<n;i++){
+    maskImg.data[i*4]=mask[i]?232:20; maskImg.data[i*4+1]=mask[i]?185:30; maskImg.data[i*4+2]=mask[i]?35:20; maskImg.data[i*4+3]=255;
+  }
+  mctx.putImageData(maskImg,0,0);
+
+  const visited = new Uint8Array(n);
+  const minArea = Math.max(20, sizeMinPct*n);
+  const maxArea = n*0.35;
+  const blobs = [];
+  const stack = new Int32Array(n);
+  for(let start=0; start<n; start++){
+    if(mask[start]!==1 || visited[start]) continue;
+    let sp2=0; stack[sp2++]=start; visited[start]=1;
+    let count=0,sumX=0,sumY=0,minX=w,maxX=0,minY=h,maxY=0;
+    while(sp2>0){
+      const idx=stack[--sp2]; const x=idx%w, y=(idx/w)|0;
+      count++; sumX+=x; sumY+=y;
+      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+        if(dx===0&&dy===0) continue;
+        const nx=x+dx, ny=y+dy;
+        if(nx<0||nx>=w||ny<0||ny>=h) continue;
+        const nidx=ny*w+nx;
+        if(mask[nidx]===1 && !visited[nidx]){ visited[nidx]=1; stack[sp2++]=nidx; }
+      }
+    }
+    if(count>=minArea && count<=maxArea){
+      const bw=maxX-minX+1, bh=maxY-minY+1;
+      const aspect = bw>bh ? bw/bh : bh/bw;
+      const rEquiv=(bw+bh)/4;
+      const circleArea=Math.PI*rEquiv*rEquiv;
+      const circularity = circleArea>0 ? Math.min(count,circleArea)/Math.max(count,circleArea) : 0;
+      if(aspect<=2.0 && circularity>=roundMin) blobs.push({cx:sumX/count, cy:sumY/count, r:Math.sqrt(count/Math.PI)});
+    }
+  }
+
+  const circCanvas = document.createElement('canvas'); circCanvas.width=w; circCanvas.height=h;
+  const cctx = circCanvas.getContext('2d');
+  cctx.drawImage(img,0,0,w,h);
+  cctx.lineWidth = Math.max(2, w*0.006);
+  cctx.strokeStyle = '#EDEDED';
+  cctx.font = `${Math.max(11,Math.round(w*0.028))}px Inter, sans-serif`;
+  blobs.forEach((b,i)=>{
+    cctx.beginPath(); cctx.arc(b.cx,b.cy,b.r,0,Math.PI*2); cctx.stroke();
+    const label=String(i+1); const tw=cctx.measureText(label).width;
+    cctx.fillStyle='#EDEDED'; cctx.beginPath(); cctx.arc(b.cx,b.cy-b.r-8,9,0,Math.PI*2); cctx.fill();
+    cctx.fillStyle='#000'; cctx.fillText(label, b.cx-tw/2, b.cy-b.r-4);
+  });
+
+  pendingResult = { count: blobs.length, circCanvas, maskCanvas, w, h };
+  showSheet();
+}
+
+function showSheet(){
+  const sc = $('sheetCanvas');
+  sc.width = pendingResult.w; sc.height = pendingResult.h;
+  sc.getContext('2d').drawImage(pendingResult.circCanvas,0,0);
+  showingMask=false; $('btnMaskToggle').textContent='Ver máscara';
+  $('sheetCount').textContent = pendingResult.count;
+  const sp = getSpecies(currentSpeciesId);
+  $('sheetTitle').textContent = `${sp.name} — árbol ${sp.trees.length+1}`;
+  $('overlay').classList.add('show');
+}
+$('btnMaskToggle').addEventListener('click', ()=>{
+  showingMask = !showingMask;
+  $('btnMaskToggle').textContent = showingMask ? 'Ver resultado' : 'Ver máscara';
+  const sc = $('sheetCanvas');
+  sc.getContext('2d').drawImage(showingMask ? pendingResult.maskCanvas : pendingResult.circCanvas, 0, 0);
+});
+$('btnRetake').addEventListener('click', ()=>{
+  $('overlay').classList.remove('show');
+  $('cameraInput').click();
+});
+$('btnSaveCount').addEventListener('click', ()=>{
+  const sp = getSpecies(currentSpeciesId);
+  const thumbCanvas = document.createElement('canvas'); thumbCanvas.width=80; thumbCanvas.height=80;
+  thumbCanvas.getContext('2d').drawImage(pendingResult.circCanvas,0,0,80,80);
+  sp.trees.push({
+    id: uid(),
+    name: `Árbol ${sp.trees.length+1}`,
+    count: pendingResult.count,
+    thumb: thumbCanvas.toDataURL('image/jpeg',0.7),
+    ts: Date.now()
+  });
+  saveData(data);
+  $('overlay').classList.remove('show');
+  renderSpecies();
+});
+
+// ---------------- utils ----------------
+function rgbToHsv(r,g,b){
+  r/=255; g/=255; b/=255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+  let h=0;
+  if(d!==0){
+    if(max===r) h=60*(((g-b)/d)%6);
+    else if(max===g) h=60*((b-r)/d+2);
+    else h=60*((r-g)/d+4);
+  }
+  if(h<0) h+=360;
+  const s = max===0?0:d/max;
+  return [h, s*100, max*100];
+}
+function hueInRange(h,hmin,hmax){ return hmin<=hmax ? (h>=hmin && h<=hmax) : (h>=hmin || h<=hmax); }
+function erode3x3(mask,w,h){
+  const out=new Uint8Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const i=y*w+x; let allOne=true;
+    for(let dy=-1;dy<=1&&allOne;dy++) for(let dx=-1;dx<=1&&allOne;dx++){
+      const nx=x+dx, ny=y+dy;
+      if(nx<0||nx>=w||ny<0||ny>=h){ allOne=false; break; }
+      if(mask[ny*w+nx]!==1) allOne=false;
+    }
+    out[i]=allOne?1:0;
+  }
+  return out;
+}
+function dilate3x3(mask,w,h){
+  const out=new Uint8Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const i=y*w+x; let anyOne=false;
+    for(let dy=-1;dy<=1&&!anyOne;dy++) for(let dx=-1;dx<=1&&!anyOne;dx++){
+      const nx=x+dx, ny=y+dy;
+      if(nx<0||nx>=w||ny<0||ny>=h) continue;
+      if(mask[ny*w+nx]===1) anyOne=true;
+    }
+    out[i]=anyOne?1:0;
+  }
+  return out;
+}
+function round1(n){ return Math.round(n*10)/10; }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+goHome();
+</script>
+</body>
+</html>
