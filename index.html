@@ -3,209 +3,325 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>ContaFrutos HSV En Vivo</title>
+<title>Contador Agrícola</title>
 <style>
-  :root{ --bg:#0A0A0A; --panel:#161616; --text:#EDEDED; --accent:#4CAF50;}
-  body{margin:0; font-family:sans-serif; background:var(--bg); color:var(--text);}
-  
-  /* Interfaz principal simplificada */
-  .header {padding: 15px; text-align: center; background: var(--panel);}
-  .btn-start {display: block; width: 90%; margin: 20px auto; padding: 15px; background: var(--accent); color: #000; font-weight: bold; font-size: 16px; border: none; border-radius: 8px;}
-  
-  /* Overlay en vivo */
-  .live-overlay {position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 100;}
-  .live-overlay.show {display: flex;}
-  
-  .video-container {flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #111;}
-  /* Usaremos un canvas en vez de video directo para dibujar los círculos encima */
-  #mainCanvas {width: 100%; height: 100%; object-fit: contain;}
-  video {display: none;} /* Video oculto, alimenta al canvas */
-  
-  .controls-panel {background: rgba(0,0,0,0.9); padding: 15px; border-top: 1px solid #333;}
-  .count-display {font-size: 32px; font-weight: bold; color: var(--accent); text-align: center; margin-bottom: 10px;}
-  
-  /* Sliders compactos */
-  .slider-row {display: flex; align-items: center; gap: 10px; margin-bottom: 5px; font-size: 12px;}
-  .slider-row input {flex: 1;}
-  
-  .action-btns {display: flex; gap: 10px; margin-top: 15px;}
-  .action-btns button {flex: 1; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;}
-  .btn-mask {background: #333; color: white;}
-  .btn-next {background: var(--accent); color: black;}
+  :root{
+    --bg:#000; --panel:#111; --line:#2A2A2A; --text:#FFFFFF; --dim:#9A9A9A;
+    --accent:#39FF6A; --danger:#FF4B4B;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,system-ui,Roboto,sans-serif; min-height:100vh;}
+  .wrap{max-width:520px;margin:0 auto;padding:20px 18px 40px;}
+  h1{font-size:22px;font-weight:800;margin:0 0 4px;}
+  .subtitle{color:var(--dim);font-size:13px;margin-bottom:20px;}
+
+  .add-row{display:flex;gap:8px;margin-bottom:20px;}
+  .add-row input{flex:1;background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:14px;color:var(--text);font-size:16px;outline:none;}
+  .add-row input:focus{border-color:var(--accent);}
+  .btn{border:none;border-radius:10px;font-weight:800;cursor:pointer;font-size:15px;}
+  .btn-accent{background:var(--accent);color:#000;padding:14px 18px;}
+  .btn-block{width:100%;padding:18px;font-size:17px;}
+  .btn-outline{background:transparent;border:2px solid var(--line);color:var(--text);padding:12px;}
+  .btn-danger{background:var(--danger);color:#fff;}
+
+  .species-card{background:var(--panel);border:2px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:12px;cursor:pointer;}
+  .species-card .sp-name{font-size:19px;font-weight:800;color:var(--accent);}
+  .species-tree{display:flex;justify-content:space-between;font-size:15px;color:var(--dim);margin-top:6px;padding-left:8px;}
+  .species-tree b{color:var(--text);font-weight:700;}
+  .empty{color:var(--dim);text-align:center;padding:30px 10px;border:2px dashed var(--line);border-radius:12px;font-size:14px;}
+
+  #view2{display:none;}
+  .back-btn{background:none;border:none;color:var(--text);font-size:16px;font-weight:700;margin-bottom:14px;cursor:pointer;padding:0;}
+  .cam-title{font-size:16px;color:var(--dim);margin-bottom:2px;}
+  .tree-label{font-size:22px;font-weight:800;color:var(--accent);margin-bottom:12px;}
+
+  .cam-wrap{position:relative;width:100%;border-radius:14px;overflow:hidden;background:#111;border:2px solid var(--line);}
+  video{width:100%;display:block;}
+  #overlay{position:absolute;top:0;left:0;width:100%;height:100%;}
+
+  .live-count{text-align:center;margin:18px 0;}
+  .live-count .num{font-size:88px;font-weight:900;line-height:1;color:var(--accent);}
+  .live-count .lbl{font-size:14px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase;margin-top:4px;}
+
+  .status{text-align:center;color:var(--dim);font-size:13px;margin-bottom:10px;min-height:32px;line-height:1.4;}
+  .status.error{color:var(--danger);font-weight:700;}
+
+  .sens-box{background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:14px 16px;margin:14px 0;}
+  .sens-label{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);margin-bottom:8px;}
+  .sens-label b{color:var(--accent);font-size:14px;}
+  .sens-box input[type=range]{width:100%;accent-color:var(--accent);height:26px;}
+  .sens-box select{width:100%;background:#000;border:2px solid var(--line);color:var(--text);padding:10px;border-radius:8px;font-size:14px;margin-top:4px;}
+  .sens-box .field-label{font-size:12px;color:var(--dim);margin:12px 0 4px;}
+  .warn-note{background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.35);color:#ffcc66;font-size:12px;padding:10px 12px;border-radius:8px;line-height:1.4;margin-bottom:14px;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:99;padding:20px;}
+  .modal-overlay.show{display:flex;}
+  .modal-box{background:var(--panel);border:2px solid var(--line);border-radius:14px;padding:22px;max-width:380px;width:100%;text-align:center;}
+  .modal-box p{font-size:15px;margin-bottom:18px;}
+  .modal-actions{display:flex;gap:10px;}
+  .modal-actions .btn{flex:1;padding:13px;}
 </style>
 </head>
 <body>
 
-<div class="header"><h1>Conteo por Color</h1></div>
-<button class="btn-start" id="btnStartLive">🎥 Iniciar Cámara</button>
-
-<!-- Pantalla de Conteo en Vivo -->
-<div class="live-overlay" id="liveOverlay">
-  <div class="video-container">
-    <video id="liveVideo" autoplay playsinline></video>
-    <canvas id="mainCanvas"></canvas>
+<div id="view1" class="wrap">
+  <h1>🌱 Contador Agrícola</h1>
+  <div class="subtitle">Registro de especies y árboles</div>
+  <div class="add-row">
+    <input type="text" id="inputNuevaEspecie" placeholder="Nueva especie (ej: Limones)">
+    <button class="btn btn-accent" id="btnAgregarEspecie">Añadir</button>
   </div>
-  
-  <div class="controls-panel">
-    <div class="count-display">Frutos: <span id="liveCount">0</span></div>
-    
-    <!-- Ajustes rápidos -->
-    <div class="slider-row"><label>Tono Min</label><input type="range" id="hMin" min="0" max="360" value="40"></div>
-    <div class="slider-row"><label>Tono Max</label><input type="range" id="hMax" min="0" max="360" value="75"></div>
-    
-    <div class="action-btns">
-        <button class="btn-mask" id="btnToggleMask">Ver Máscara</button>
-        <button class="btn-next" id="btnNext">Guardar y Siguiente</button>
+  <div id="listaEspecies"></div>
+  <button class="btn btn-outline btn-block" id="btnBorrarTodo" style="margin-top:24px;color:var(--danger);border-color:var(--danger);">⚠️ Borrar toda la memoria</button>
+</div>
+
+<div id="view2" class="wrap">
+  <button class="back-btn" id="btnVolver">← Volver</button>
+  <div class="cam-title" id="camEspecieLabel">Especie</div>
+  <div class="tree-label" id="camArbolLabel">Árbol 1</div>
+  <div class="cam-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+  <div class="status" id="statusMsg">Iniciando cámara y modelo…</div>
+
+  <div class="warn-note">MediaPipe no tiene una clase "limón": se aproxima usando la clase COCO más parecida. Puede confundir corteza, hojas u otros objetos redondos — ajustá la clase y la certeza mínima según lo que veas en pantalla.</div>
+
+  <div class="sens-box">
+    <div class="field-label">Clase aproximada a detectar</div>
+    <select id="selectClase">
+      <option value="orange">Naranja / cítrico (recomendado para limón)</option>
+      <option value="apple">Manzana</option>
+      <option value="banana">Banana</option>
+    </select>
+    <div class="sens-label" style="margin-top:14px;"><span>Certeza mínima</span><b id="umbralTexto">50%</b></div>
+    <input type="range" id="sliderUmbral" min="0.1" max="1.0" step="0.01" value="0.5">
+  </div>
+
+  <div class="live-count">
+    <div class="num" id="liveCountNum">0</div>
+    <div class="lbl">frutos detectados</div>
+  </div>
+
+  <button class="btn btn-accent btn-block" id="btnGuardarSiguiente" disabled>💾 Guardar y Siguiente Árbol</button>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <p id="modalText">¿Confirmar?</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="modalCancel">Cancelar</button>
+      <button class="btn btn-danger" id="modalConfirm">Confirmar</button>
     </div>
   </div>
 </div>
 
-<script>
-const $ = id => document.getElementById(id);
-const video = $('liveVideo');
-const mainCanvas = $('mainCanvas');
-const ctx = mainCanvas.getContext('2d', { willReadFrequently: true });
+<script type="module">
+import { ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
 
-let animacionLoop = null;
-let mostrandoMascara = false;
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-tasks/object_detector/efficientdet_lite0_uint8.tflite";
 
-// Variables de calibración (las lee directo en el loop)
-const getSettings = () => ({
-    hMin: parseInt($('hMin').value),
-    hMax: parseInt($('hMax').value),
-    sMin: 35, vMin: 30, // Valores fijos por simplicidad, puedes agregar sus sliders
-    sizeMinPct: 0.004, roundMin: 0.50
-});
+/* ---------------- persistencia ---------------- */
+const STORAGE_KEY = 'registrosAgricolas';
+function cargarMemoria(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }catch(e){ return {}; } }
+function guardarMemoria(mem){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(mem)); }catch(e){ console.error('Error guardando en localStorage', e); } }
 
-// Arrancar cámara
-$('btnStartLive').addEventListener('click', async () => {
-    $('liveOverlay').classList.add('show');
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = stream;
-    video.onloadedmetadata = () => {
-        // Reducimos resolución de análisis para rendimiento
-        mainCanvas.width = 160; 
-        mainCanvas.height = 160 * (video.videoHeight / video.videoWidth);
-        procesarFrame();
-    };
-});
+let memoria = cargarMemoria();
+let especieActual = null;
+let arbolActualNum = 1;
+let umbralActual = 0.5;
+let claseActual = 'orange';
 
-$('btnToggleMask').addEventListener('click', () => {
-    mostrandoMascara = !mostrandoMascara;
-    $('btnToggleMask').textContent = mostrandoMascara ? 'Ver Normal' : 'Ver Máscara';
-});
+/* ---------------- vista 1: dashboard ---------------- */
+const view1 = document.getElementById('view1');
+const view2 = document.getElementById('view2');
+const listaEspecies = document.getElementById('listaEspecies');
+const inputNuevaEspecie = document.getElementById('inputNuevaEspecie');
 
-// Cierre / Siguiente
-$('btnNext').addEventListener('click', () => {
-    // Aquí iría tu lógica de guardar en localStorage
-    alert("¡Guardado! Pasando al siguiente árbol...");
-});
-
-// --- EL NÚCLEO MATEMÁTICO ---
-function procesarFrame() {
-    if (video.paused || video.ended) return;
-    
-    const w = mainCanvas.width;
-    const h = mainCanvas.height;
-    
-    // 1. Dibujar frame actual
-    ctx.drawImage(video, 0, 0, w, h);
-    const imgData = ctx.getImageData(0, 0, w, h);
-    const px = imgData.data;
-    const n = w * h;
-    
-    const s = getSettings();
-    let mask = new Uint8Array(n);
-    
-    // 2. Filtro HSV
-    for(let i=0; i<n; i++){
-        const o = i*4;
-        const [hh, ss, vv] = rgbToHsv(px[o], px[o+1], px[o+2]);
-        if(hueInRange(hh, s.hMin, s.hMax) && ss >= s.sMin && vv >= s.vMin) {
-            mask[i] = 1;
-        }
-    }
-    
-    // 3. Opcional: Erode/Dilate para limpiar ruido (comentado para máximo rendimiento, actívalo si hay mucha basura)
-    // mask = erode3x3(mask, w, h); mask = dilate3x3(mask, w, h);
-    
-    // 4. Blob Detection (Agrupación)
-    const visited = new Uint8Array(n);
-    const minArea = Math.max(10, s.sizeMinPct * n);
-    const blobs = [];
-    const stack = new Int32Array(n);
-    
-    for(let start=0; start<n; start++){
-        if(mask[start]!==1 || visited[start]) continue;
-        let sp2=0; stack[sp2++]=start; visited[start]=1;
-        let count=0, sumX=0, sumY=0, minX=w, maxX=0, minY=h, maxY=0;
-        
-        while(sp2>0){
-            const idx = stack[--sp2]; 
-            const x = idx % w, y = (idx/w)|0;
-            count++; sumX+=x; sumY+=y;
-            if(x<minX) minX=x; if(x>maxX) maxX=x; if(y<minY) minY=y; if(y>maxY) maxY=y;
-            
-            for(let dy=-1; dy<=1; dy++) for(let dx=-1; dx<=1; dx++){
-                if(dx===0 && dy===0) continue;
-                const nx=x+dx, ny=y+dy;
-                if(nx<0||nx>=w||ny<0||ny>=h) continue;
-                const nidx=ny*w+nx;
-                if(mask[nidx]===1 && !visited[nidx]){ visited[nidx]=1; stack[sp2++]=nidx; }
-            }
-        }
-        
-        if(count >= minArea){
-            const bw = maxX-minX+1, bh = maxY-minY+1;
-            const aspect = bw>bh ? bw/bh : bh/bw;
-            if(aspect <= 2.5) { // Control de redondez simple
-                blobs.push({ cx: sumX/count, cy: sumY/count, r: Math.sqrt(count/Math.PI) });
-            }
-        }
-    }
-    
-    // 5. Dibujar en pantalla
-    if (mostrandoMascara) {
-        // Pintamos la máscara de blanco y negro
-        for(let i=0; i<n; i++){
-            const o = i*4;
-            const val = mask[i] ? 255 : 0;
-            px[o] = val; px[o+1] = val; px[o+2] = val;
-        }
-        ctx.putImageData(imgData, 0, 0);
-    } else {
-        // Dibujamos círculos sobre el video original
-        ctx.strokeStyle = '#4CAF50';
-        ctx.lineWidth = 2;
-        blobs.forEach(b => {
-            ctx.beginPath();
-            ctx.arc(b.cx, b.cy, b.r, 0, Math.PI*2);
-            ctx.stroke();
-        });
-    }
-    
-    $('liveCount').textContent = blobs.length;
-    
-    // Ciclo infinito
-    animacionLoop = requestAnimationFrame(procesarFrame);
-}
-
-// Utilidades matemáticas
-function rgbToHsv(r,g,b){
-  r/=255; g/=255; b/=255;
-  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
-  let h=0;
-  if(d!==0){
-    if(max===r) h=60*(((g-b)/d)%6);
-    else if(max===g) h=60*((b-r)/d+2);
-    else h=60*((r-g)/d+4);
+function renderDashboard(){
+  const nombres = Object.keys(memoria);
+  if(nombres.length === 0){
+    listaEspecies.innerHTML = '<div class="empty">Todavía no hay especies registradas</div>';
+    return;
   }
-  if(h<0) h+=360;
-  const s = max===0?0:d/max;
-  return [h, s*100, max*100];
+  listaEspecies.innerHTML = '';
+  nombres.forEach(especie=>{
+    const arboles = memoria[especie];
+    const nombresArboles = Object.keys(arboles);
+    const totalFrutos = nombresArboles.reduce((s,a)=> s + (arboles[a]||0), 0);
+    const card = document.createElement('div');
+    card.className = 'species-card';
+    card.innerHTML = `<div class="sp-name">🌿 ${escapeHtml(especie)}</div><div class="species-tree"><span>${nombresArboles.length} árbol(es)</span><b>${totalFrutos} frutos</b></div>`;
+    card.addEventListener('click', ()=> entrarACamara(especie));
+    listaEspecies.appendChild(card);
+  });
 }
-function hueInRange(h,hmin,hmax){ return hmin<=hmax ? (h>=hmin && h<=hmax) : (h>=hmin || h<=hmax); }
 
+document.getElementById('btnAgregarEspecie').addEventListener('click', ()=>{
+  const nombre = inputNuevaEspecie.value.trim();
+  if(!nombre) return;
+  if(!memoria[nombre]) memoria[nombre] = {};
+  guardarMemoria(memoria);
+  inputNuevaEspecie.value = '';
+  renderDashboard();
+});
+inputNuevaEspecie.addEventListener('keydown', e=>{ if(e.key === 'Enter') document.getElementById('btnAgregarEspecie').click(); });
+
+document.getElementById('btnBorrarTodo').addEventListener('click', ()=>{
+  showModal('¿Borrar TODA la memoria del celular?', ()=>{ memoria = {}; guardarMemoria(memoria); renderDashboard(); });
+});
+
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+const modalOverlay = document.getElementById('modalOverlay');
+const modalText = document.getElementById('modalText');
+let modalCallback = null;
+function showModal(texto, onConfirm){ modalText.textContent = texto; modalCallback = onConfirm; modalOverlay.classList.add('show'); }
+document.getElementById('modalCancel').addEventListener('click', ()=>{ modalOverlay.classList.remove('show'); modalCallback = null; });
+document.getElementById('modalConfirm').addEventListener('click', ()=>{ modalOverlay.classList.remove('show'); if(modalCallback) modalCallback(); modalCallback = null; });
+
+/* ---------------- vista 2: cámara + IA en vivo ---------------- */
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const octx = overlay.getContext('2d');
+const statusMsg = document.getElementById('statusMsg');
+const liveCountNum = document.getElementById('liveCountNum');
+const btnGuardarSiguiente = document.getElementById('btnGuardarSiguiente');
+const camEspecieLabel = document.getElementById('camEspecieLabel');
+const camArbolLabel = document.getElementById('camArbolLabel');
+const sliderUmbral = document.getElementById('sliderUmbral');
+const umbralTexto = document.getElementById('umbralTexto');
+const selectClase = document.getElementById('selectClase');
+
+let detector = null;
+let cameraStream = null;
+let loopActivo = false;
+let historialConteo = [];
+let conteoEstable = 0;
+let loopErrorAvisado = false;
+
+sliderUmbral.addEventListener('input', ()=>{ umbralActual = parseFloat(sliderUmbral.value); umbralTexto.textContent = Math.round(umbralActual * 100) + '%'; });
+selectClase.addEventListener('change', ()=>{ claseActual = selectClase.value; historialConteo = []; conteoEstable = 0; liveCountNum.textContent = '0'; });
+
+async function entrarACamara(especie){
+  especieActual = especie;
+  const arboles = memoria[especieActual];
+  arbolActualNum = Object.keys(arboles).length + 1;
+  camEspecieLabel.textContent = especieActual;
+  camArbolLabel.textContent = `Árbol ${arbolActualNum}`;
+  liveCountNum.textContent = '0';
+  historialConteo = []; conteoEstable = 0; loopErrorAvisado = false;
+  btnGuardarSiguiente.disabled = true;
+  statusMsg.classList.remove('error');
+  statusMsg.textContent = 'Iniciando cámara y modelo…';
+  view1.style.display = 'none'; view2.style.display = 'block';
+
+  await iniciarCamara();
+  await iniciarModelo();
+
+  if(cameraStream && detector){
+    btnGuardarSiguiente.disabled = false;
+    statusMsg.classList.remove('error');
+    statusMsg.textContent = 'Detectando en vivo…';
+    if(!loopActivo){ loopActivo = true; requestAnimationFrame(loopDeteccion); }
+  }
+}
+
+async function iniciarCamara(){
+  if(cameraStream) return;
+  try{
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = cameraStream;
+    await new Promise(res => { video.onloadedmetadata = () => { video.play(); res(); }; });
+    overlay.width = video.videoWidth; overlay.height = video.videoHeight;
+  }catch(err){
+    statusMsg.classList.add('error');
+    statusMsg.textContent = 'Error de cámara: dale permiso de cámara al sitio.';
+    console.error('Error iniciando cámara:', err);
+  }
+}
+
+async function iniciarModelo(){
+  if(detector) return; // ya cargado, se reutiliza entre árboles y especies
+  try{
+    const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
+    detector = await ObjectDetector.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: MODEL_URL },
+      scoreThreshold: 0.1, // filtramos nosotros mismos según umbralActual, así el slider no requiere recargar el modelo
+      maxResults: 20,
+      runningMode: "VIDEO"
+    });
+  }catch(err){
+    statusMsg.classList.add('error');
+    statusMsg.textContent = 'Error de red: no se pudo cargar el modelo de MediaPipe. Revisá tu conexión a internet.';
+    console.error('Error cargando ObjectDetector:', err);
+  }
+}
+
+function loopDeteccion(){
+  if(!loopActivo) return;
+  if(detector && video.readyState >= 2){
+    try{
+      const resultado = detector.detectForVideo(video, performance.now());
+      const validas = (resultado.detections || []).filter(d=>{
+        const cat = d.categories[0];
+        return cat && cat.categoryName === claseActual && cat.score >= umbralActual;
+      });
+      actualizarConteoEnVivo(validas.length);
+      dibujarBoundingBoxes(validas);
+      loopErrorAvisado = false;
+    }catch(err){
+      console.error('Error durante la detección de un frame:', err);
+      if(!loopErrorAvisado){
+        statusMsg.classList.add('error');
+        statusMsg.textContent = 'El modelo dejó de responder. Mirá la consola (F12) para más detalle.';
+        loopErrorAvisado = true;
+      }
+    }
+  }
+  requestAnimationFrame(loopDeteccion);
+}
+
+function actualizarConteoEnVivo(n){
+  historialConteo.push(n);
+  if(historialConteo.length > 8) historialConteo.shift();
+  const conteo = {}; let mejor = n, mejorFreq = 0;
+  historialConteo.forEach(v=>{ conteo[v] = (conteo[v]||0) + 1; if(conteo[v] > mejorFreq){ mejorFreq = conteo[v]; mejor = v; } });
+  conteoEstable = mejor; liveCountNum.textContent = conteoEstable;
+}
+
+function dibujarBoundingBoxes(detecciones){
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  octx.lineWidth = 3; octx.font = 'bold 16px sans-serif';
+  detecciones.forEach(d=>{
+    const box = d.boundingBox; // {originX, originY, width, height} en píxeles del video
+    const cat = d.categories[0];
+    octx.strokeStyle = '#39FF6A';
+    octx.strokeRect(box.originX, box.originY, box.width, box.height);
+    const etiqueta = `${cat.categoryName} ${Math.round(cat.score * 100)}%`;
+    const tw = octx.measureText(etiqueta).width;
+    octx.fillStyle = '#39FF6A'; octx.fillRect(box.originX, box.originY - 20, tw + 8, 20);
+    octx.fillStyle = '#000'; octx.fillText(etiqueta, box.originX + 4, box.originY - 5);
+  });
+}
+
+btnGuardarSiguiente.addEventListener('click', ()=>{
+  if(!especieActual) return;
+  memoria[especieActual][`Árbol ${arbolActualNum}`] = conteoEstable;
+  guardarMemoria(memoria);
+  arbolActualNum += 1; camArbolLabel.textContent = `Árbol ${arbolActualNum}`;
+  historialConteo = []; conteoEstable = 0; liveCountNum.textContent = '0';
+});
+
+document.getElementById('btnVolver').addEventListener('click', ()=>{
+  loopActivo = false;
+  if(cameraStream){ cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  video.srcObject = null; octx.clearRect(0, 0, overlay.width, overlay.height);
+  view2.style.display = 'none'; view1.style.display = 'block'; renderDashboard();
+});
+
+renderDashboard();
 </script>
 </body>
 </html>
