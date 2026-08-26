@@ -40,9 +40,12 @@
   video{width:100%;display:block;}
   #overlay{position:absolute;top:0;left:0;width:100%;height:100%;}
 
-  .live-count{text-align:center;margin:18px 0;}
+  .live-count-container{display:flex;align-items:center;justify-content:center;margin:18px 0;position:relative;}
+  .live-count{text-align:center;}
   .live-count .num{font-size:88px;font-weight:900;line-height:1;color:var(--accent);}
   .live-count .lbl{font-size:14px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase;margin-top:4px;}
+  
+  .reset-btn{position:absolute;right:10px;background:var(--panel);border:2px solid var(--line);color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:bold;}
 
   .status{text-align:center;color:var(--dim);font-size:13px;margin-bottom:10px;min-height:32px;line-height:1.4;}
   .status.error{color:var(--danger);font-weight:700;}
@@ -66,8 +69,8 @@
 <body>
 
 <div id="view1" class="wrap">
-  <h1>🌱 Contador Agrícola</h1>
-  <div class="subtitle">Registro de especies y árboles</div>
+  <h1>🌱 Contador Genérico</h1>
+  <div class="subtitle">Paneo por árbol con tracking (MediaPipe)</div>
   <div class="add-row">
     <input type="text" id="inputNuevaEspecie" placeholder="Nueva especie (ej: Limones)">
     <button class="btn btn-accent" id="btnAgregarEspecie">Añadir</button>
@@ -86,7 +89,7 @@
   </div>
   <div class="status" id="statusMsg">Iniciando cámara y modelo…</div>
 
-  <div class="warn-note">MediaPipe no tiene una clase "limón": se aproxima usando la clase COCO más parecida. Puede confundir corteza, hojas u otros objetos redondos — ajustá la clase y la certeza mínima según lo que veas en pantalla.</div>
+  <div class="warn-note">Haz un paneo LENTO por el árbol. La IA recordará los frutos para ir sumándolos al total sin contarlos doble.</div>
 
   <div class="sens-box">
     <div class="field-label">Clase aproximada a detectar</div>
@@ -99,9 +102,12 @@
     <input type="range" id="sliderUmbral" min="0.1" max="1.0" step="0.01" value="0.5">
   </div>
 
-  <div class="live-count">
-    <div class="num" id="liveCountNum">0</div>
-    <div class="lbl">frutos detectados</div>
+  <div class="live-count-container">
+    <div class="live-count">
+      <div class="num" id="liveCountNum">0</div>
+      <div class="lbl">frutos ACUMULADOS</div>
+    </div>
+    <button class="reset-btn" id="btnResetConteo">🔄 Reiniciar<br>Paneo</button>
   </div>
 
   <button class="btn btn-accent btn-block" id="btnGuardarSiguiente" disabled>💾 Guardar y Siguiente Árbol</button>
@@ -125,7 +131,7 @@ const MODEL_URL = "https://storage.googleapis.com/mediapipe-tasks/object_detecto
 /* ---------------- persistencia ---------------- */
 const STORAGE_KEY = 'registrosAgricolas';
 function cargarMemoria(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }catch(e){ return {}; } }
-function guardarMemoria(mem){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(mem)); }catch(e){ console.error('Error guardando en localStorage', e); } }
+function guardarMemoria(mem){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(mem)); }catch(e){} }
 
 let memoria = cargarMemoria();
 let especieActual = null;
@@ -188,6 +194,7 @@ const octx = overlay.getContext('2d');
 const statusMsg = document.getElementById('statusMsg');
 const liveCountNum = document.getElementById('liveCountNum');
 const btnGuardarSiguiente = document.getElementById('btnGuardarSiguiente');
+const btnResetConteo = document.getElementById('btnResetConteo');
 const camEspecieLabel = document.getElementById('camEspecieLabel');
 const camArbolLabel = document.getElementById('camArbolLabel');
 const sliderUmbral = document.getElementById('sliderUmbral');
@@ -197,12 +204,26 @@ const selectClase = document.getElementById('selectClase');
 let detector = null;
 let cameraStream = null;
 let loopActivo = false;
-let historialConteo = [];
-let conteoEstable = 0;
 let loopErrorAvisado = false;
 
+/* --- VARIABLES DE TRACKING (ACUMULADOR) --- */
+let globalCount = 0;
+let nextTrackId = 1;
+let activeTracks = [];
+const MAX_DISTANCE = 120; // Píxeles máximos que se puede mover un limón entre frames
+const MAX_MISSED = 8;     // Frames que espera antes de "olvidar" un limón si se tapa
+
 sliderUmbral.addEventListener('input', ()=>{ umbralActual = parseFloat(sliderUmbral.value); umbralTexto.textContent = Math.round(umbralActual * 100) + '%'; });
-selectClase.addEventListener('change', ()=>{ claseActual = selectClase.value; historialConteo = []; conteoEstable = 0; liveCountNum.textContent = '0'; });
+selectClase.addEventListener('change', ()=>{ claseActual = selectClase.value; resetearTracker(); });
+btnResetConteo.addEventListener('click', ()=>{ resetearTracker(); });
+
+function resetearTracker() {
+  globalCount = 0;
+  nextTrackId = 1;
+  activeTracks = [];
+  liveCountNum.textContent = '0';
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+}
 
 async function entrarACamara(especie){
   especieActual = especie;
@@ -210,8 +231,8 @@ async function entrarACamara(especie){
   arbolActualNum = Object.keys(arboles).length + 1;
   camEspecieLabel.textContent = especieActual;
   camArbolLabel.textContent = `Árbol ${arbolActualNum}`;
-  liveCountNum.textContent = '0';
-  historialConteo = []; conteoEstable = 0; loopErrorAvisado = false;
+  resetearTracker();
+  loopErrorAvisado = false;
   btnGuardarSiguiente.disabled = true;
   statusMsg.classList.remove('error');
   statusMsg.textContent = 'Iniciando cámara y modelo…';
@@ -223,7 +244,7 @@ async function entrarACamara(especie){
   if(cameraStream && detector){
     btnGuardarSiguiente.disabled = false;
     statusMsg.classList.remove('error');
-    statusMsg.textContent = 'Detectando en vivo…';
+    statusMsg.textContent = 'Detectando en vivo… (Haz el paneo LENTO)';
     if(!loopActivo){ loopActivo = true; requestAnimationFrame(loopDeteccion); }
   }
 }
@@ -239,43 +260,35 @@ async function iniciarCamara(){
     overlay.width = video.videoWidth; overlay.height = video.videoHeight;
   }catch(err){
     statusMsg.classList.add('error');
-    statusMsg.textContent = 'Error de cámara: dale permiso de cámara al sitio.';
-    console.error('Error iniciando cámara:', err);
+    statusMsg.textContent = 'Error de cámara: dale permiso al sitio.';
   }
 }
 
 async function iniciarModelo(){
-  if(detector) return; // ya cargado, se reutiliza entre árboles y especies
+  if(detector) return;
   try{
     const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
     try{
-      // Intento 1: GPU (más rápido en la mayoría de los celulares modernos)
       detector = await ObjectDetector.createFromOptions(vision, {
         baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-        scoreThreshold: 0.1,
-        maxResults: 20,
-        runningMode: "VIDEO"
+        scoreThreshold: 0.1, maxResults: 20, runningMode: "VIDEO"
       });
     }catch(gpuErr){
-      console.warn('GPU delegate no disponible, usando CPU:', gpuErr);
-      // Intento 2: CPU (más lento pero compatible con cualquier dispositivo)
       detector = await ObjectDetector.createFromOptions(vision, {
         baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
-        scoreThreshold: 0.1,
-        maxResults: 20,
-        runningMode: "VIDEO"
+        scoreThreshold: 0.1, maxResults: 20, runningMode: "VIDEO"
       });
     }
   }catch(err){
     statusMsg.classList.add('error');
-    statusMsg.textContent = 'Error de red: no se pudo cargar el modelo de MediaPipe. Revisá tu conexión a internet.';
-    console.error('Error cargando ObjectDetector:', err);
+    statusMsg.textContent = 'Error cargando MediaPipe. Revisá tu internet.';
   }
 }
 
-/* ---------------- filtro de color (segunda validación sobre cada caja) ---------------- */
+/* --- FILTRO DE COLOR --- */
 const cropCanvas = document.createElement('canvas');
 const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+const COLOR_HUE_MIN = 35, COLOR_HUE_MAX = 95, COLOR_SAT_MIN = 20, COLOR_VAL_MIN = 25;
 
 function rgbToHsv(r,g,b){
   r/=255; g/=255; b/=255;
@@ -287,35 +300,95 @@ function rgbToHsv(r,g,b){
     else h=60*((r-g)/d+4);
   }
   if(h<0) h+=360;
-  const s = max===0?0:d/max;
-  return [h, s*100, max*100];
+  return [h, (max===0?0:d/max)*100, max*100];
 }
-
-// Rango de color esperado para un limón/cítrico: amarillo-verdoso.
-// Se usa solo como segundo filtro sobre lo que ya detectó MediaPipe.
-const COLOR_HUE_MIN = 35, COLOR_HUE_MAX = 95, COLOR_SAT_MIN = 20, COLOR_VAL_MIN = 25;
 
 function cajaPareceFruto(box){
   const x = Math.max(0, Math.round(box.originX));
   const y = Math.max(0, Math.round(box.originY));
   const w = Math.min(video.videoWidth - x, Math.round(box.width));
   const h = Math.min(video.videoHeight - y, Math.round(box.height));
-  if(w <= 0 || h <= 0) return true; // caja inválida, no descartamos por las dudas
+  if(w <= 0 || h <= 0) return true; 
 
-  cropCanvas.width = 24; cropCanvas.height = 24; // achicamos para que el chequeo sea barato
+  cropCanvas.width = 24; cropCanvas.height = 24;
   cropCtx.drawImage(video, x, y, w, h, 0, 0, 24, 24);
   const data = cropCtx.getImageData(0, 0, 24, 24).data;
-
   let pixelesFruta = 0, total = 0;
   for(let i=0; i<data.length; i+=4){
     const [hh,ss,vv] = rgbToHsv(data[i], data[i+1], data[i+2]);
     total++;
     if(hh>=COLOR_HUE_MIN && hh<=COLOR_HUE_MAX && ss>=COLOR_SAT_MIN && vv>=COLOR_VAL_MIN) pixelesFruta++;
   }
-  return total>0 && (pixelesFruta/total) >= 0.25; // al menos 25% de la caja con color de fruto
+  return total>0 && (pixelesFruta/total) >= 0.25; 
 }
 
-const INTERVALO_DETECCION_MS = 160; // ~6 detecciones por segundo: alivia el hilo principal
+/* --- LÓGICA DE TRACKING (ACUMULACIÓN) --- */
+function procesarTracks(detecciones) {
+  // 1. Extraer centroides (centro exacto) de lo que la IA ve AHORA
+  let currentCentroids = detecciones.map(d => {
+    return {
+      x: d.boundingBox.originX + (d.boundingBox.width / 2),
+      y: d.boundingBox.originY + (d.boundingBox.height / 2),
+      box: d.boundingBox,
+      score: d.categories[0].score
+    };
+  });
+
+  let matchedDetectionIndices = new Set();
+  
+  // 2. Intentar emparejar la memoria con lo que vemos ahora
+  for (let i = 0; i < activeTracks.length; i++) {
+    let track = activeTracks[i];
+    let bestDist = MAX_DISTANCE;
+    let bestDetIdx = -1;
+
+    for (let j = 0; j < currentCentroids.length; j++) {
+      if (matchedDetectionIndices.has(j)) continue;
+      let det = currentCentroids[j];
+      
+      // Teorema de pitágoras para ver distancia entre puntos
+      let dist = Math.hypot(track.x - det.x, track.y - det.y);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestDetIdx = j;
+      }
+    }
+
+    if (bestDetIdx !== -1) {
+      // ¡Encontramos el limón que ya estábamos siguiendo!
+      track.x = currentCentroids[bestDetIdx].x;
+      track.y = currentCentroids[bestDetIdx].y;
+      track.box = currentCentroids[bestDetIdx].box;
+      track.score = currentCentroids[bestDetIdx].score;
+      track.missed = 0; // Resetear el contador de pérdida
+      matchedDetectionIndices.add(bestDetIdx);
+    } else {
+      // No lo vemos... sumamos error
+      track.missed++;
+    }
+  }
+
+  // 3. Borrar de la memoria los limones que ya se salieron de la pantalla por completo
+  activeTracks = activeTracks.filter(t => t.missed < MAX_MISSED);
+
+  // 4. Registrar limones NUEVOS que acaban de entrar a la pantalla
+  for (let j = 0; j < currentCentroids.length; j++) {
+    if (!matchedDetectionIndices.has(j)) {
+      activeTracks.push({
+        id: nextTrackId++,
+        x: currentCentroids[j].x,
+        y: currentCentroids[j].y,
+        box: currentCentroids[j].box,
+        score: currentCentroids[j].score,
+        missed: 0
+      });
+      globalCount++; // ¡SUMAMOS AL TOTAL GENERAL!
+      liveCountNum.textContent = globalCount;
+    }
+  }
+}
+
+const INTERVALO_DETECCION_MS = 60; 
 let ultimaDeteccionTs = 0;
 
 function loopDeteccion(ahora){
@@ -333,49 +406,53 @@ function loopDeteccion(ahora){
         if(!cat || cat.categoryName !== claseActual || cat.score < umbralActual) return false;
         return cajaPareceFruto(d.boundingBox);
       });
-      actualizarConteoEnVivo(validas.length);
-      dibujarBoundingBoxes(validas);
+      
+      procesarTracks(validas);
+      dibujarBoundingBoxes();
       loopErrorAvisado = false;
     }catch(err){
-      console.error('Error durante la detección de un frame:', err);
       if(!loopErrorAvisado){
         statusMsg.classList.add('error');
-        statusMsg.textContent = 'El modelo dejó de responder. Mirá la consola (F12) para más detalle.';
+        statusMsg.textContent = 'El modelo dejó de responder. Revisa la consola.';
         loopErrorAvisado = true;
       }
     }
   }
 }
 
-function actualizarConteoEnVivo(n){
-  historialConteo.push(n);
-  if(historialConteo.length > 8) historialConteo.shift();
-  const conteo = {}; let mejor = n, mejorFreq = 0;
-  historialConteo.forEach(v=>{ conteo[v] = (conteo[v]||0) + 1; if(conteo[v] > mejorFreq){ mejorFreq = conteo[v]; mejor = v; } });
-  conteoEstable = mejor; liveCountNum.textContent = conteoEstable;
-}
-
-function dibujarBoundingBoxes(detecciones){
+function dibujarBoundingBoxes(){
   octx.clearRect(0, 0, overlay.width, overlay.height);
   octx.lineWidth = 3; octx.font = 'bold 16px sans-serif';
-  detecciones.forEach(d=>{
-    const box = d.boundingBox; // {originX, originY, width, height} en píxeles del video
-    const cat = d.categories[0];
-    octx.strokeStyle = '#39FF6A';
-    octx.strokeRect(box.originX, box.originY, box.width, box.height);
-    const etiqueta = `${cat.categoryName} ${Math.round(cat.score * 100)}%`;
+  
+  const scaleX = overlay.width / video.videoWidth;
+  const scaleY = overlay.height / video.videoHeight;
+
+  // Dibujamos solo los tracks que están activos y visibles
+  activeTracks.forEach(track => {
+    if(track.missed > 0) return; // Si no lo vemos este milisegundo exacto, no lo dibujamos
+    
+    const x = track.box.originX * scaleX;
+    const y = track.box.originY * scaleY;
+    const w = track.box.width * scaleX;
+    const h = track.box.height * scaleY;
+    
+    octx.strokeStyle = '#39FF6A'; 
+    octx.strokeRect(x, y, w, h);
+    
+    // Le ponemos el ID encima para que sepas que lo está rastreando bien
+    const etiqueta = `#${track.id} ${Math.round(track.score * 100)}%`;
     const tw = octx.measureText(etiqueta).width;
-    octx.fillStyle = '#39FF6A'; octx.fillRect(box.originX, box.originY - 20, tw + 8, 20);
-    octx.fillStyle = '#000'; octx.fillText(etiqueta, box.originX + 4, box.originY - 5);
+    octx.fillStyle = '#39FF6A'; octx.fillRect(x, y - 20, tw + 8, 20);
+    octx.fillStyle = '#000'; octx.fillText(etiqueta, x + 4, y - 5);
   });
 }
 
 btnGuardarSiguiente.addEventListener('click', ()=>{
   if(!especieActual) return;
-  memoria[especieActual][`Árbol ${arbolActualNum}`] = conteoEstable;
+  memoria[especieActual][`Árbol ${arbolActualNum}`] = globalCount;
   guardarMemoria(memoria);
   arbolActualNum += 1; camArbolLabel.textContent = `Árbol ${arbolActualNum}`;
-  historialConteo = []; conteoEstable = 0; liveCountNum.textContent = '0';
+  resetearTracker();
 });
 
 document.getElementById('btnVolver').addEventListener('click', ()=>{
