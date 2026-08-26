@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>Contador Agrícola</title>
+<title>Contador Agrícola ONNX</title>
+<!-- Librería oficial de Microsoft para correr modelos ONNX en el navegador -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
 <style>
   :root{
     --bg:#000; --panel:#111; --line:#2A2A2A; --text:#FFFFFF; --dim:#9A9A9A;
@@ -49,14 +51,12 @@
 
   .status{text-align:center;color:var(--dim);font-size:13px;margin-bottom:10px;min-height:32px;line-height:1.4;}
   .status.error{color:var(--danger);font-weight:700;}
+  .status.success{color:var(--accent);font-weight:700;}
 
   .sens-box{background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:14px 16px;margin:14px 0;}
   .sens-label{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);margin-bottom:8px;}
   .sens-label b{color:var(--accent);font-size:14px;}
   .sens-box input[type=range]{width:100%;accent-color:var(--accent);height:26px;}
-  .sens-box select{width:100%;background:#000;border:2px solid var(--line);color:var(--text);padding:10px;border-radius:8px;font-size:14px;margin-top:4px;}
-  .sens-box .field-label{font-size:12px;color:var(--dim);margin:12px 0 4px;}
-  .warn-note{background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.35);color:#ffcc66;font-size:12px;padding:10px 12px;border-radius:8px;line-height:1.4;margin-bottom:14px;}
 
   .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:99;padding:20px;}
   .modal-overlay.show{display:flex;}
@@ -69,8 +69,8 @@
 <body>
 
 <div id="view1" class="wrap">
-  <h1>🌱 Contador Genérico</h1>
-  <div class="subtitle">Paneo por árbol con tracking (MediaPipe)</div>
+  <h1>🌱 Contador Agrícola PRO</h1>
+  <div class="subtitle">Modelo Custom YOLO ONNX - 100% Local</div>
   <div class="add-row">
     <input type="text" id="inputNuevaEspecie" placeholder="Nueva especie (ej: Limones)">
     <button class="btn btn-accent" id="btnAgregarEspecie">Añadir</button>
@@ -87,18 +87,10 @@
     <video id="video" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
   </div>
-  <div class="status" id="statusMsg">Iniciando cámara y modelo…</div>
-
-  <div class="warn-note">Haz un paneo LENTO por el árbol. La IA recordará los frutos para ir sumándolos al total sin contarlos doble.</div>
+  <div class="status" id="statusMsg">Cargando modelo neuronal...</div>
 
   <div class="sens-box">
-    <div class="field-label">Clase aproximada a detectar</div>
-    <select id="selectClase">
-      <option value="orange">Naranja / cítrico (recomendado para limón)</option>
-      <option value="apple">Manzana</option>
-      <option value="banana">Banana</option>
-    </select>
-    <div class="sens-label" style="margin-top:14px;"><span>Certeza mínima</span><b id="umbralTexto">50%</b></div>
+    <div class="sens-label"><span>Certeza mínima</span><b id="umbralTexto">50%</b></div>
     <input type="range" id="sliderUmbral" min="0.1" max="1.0" step="0.01" value="0.5">
   </div>
 
@@ -123,13 +115,12 @@
   </div>
 </div>
 
-<script type="module">
-import { ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
+<script>
+/* ---------------- ARCHIVO LOCAL ONNX ---------------- */
+const MODEL_URL = "./best.onnx"; 
 
-const MODEL_URL = "https://storage.googleapis.com/mediapipe-tasks/object_detector/efficientdet_lite0_uint8.tflite";
-
-/* ---------------- persistencia ---------------- */
-const STORAGE_KEY = 'registrosAgricolas';
+/* ---------------- PERSISTENCIA ---------------- */
+const STORAGE_KEY = 'registrosAgricolasONNX';
 function cargarMemoria(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }catch(e){ return {}; } }
 function guardarMemoria(mem){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(mem)); }catch(e){} }
 
@@ -137,9 +128,8 @@ let memoria = cargarMemoria();
 let especieActual = null;
 let arbolActualNum = 1;
 let umbralActual = 0.5;
-let claseActual = 'orange';
 
-/* ---------------- vista 1: dashboard ---------------- */
+/* ---------------- VISTA DASHBOARD ---------------- */
 const view1 = document.getElementById('view1');
 const view2 = document.getElementById('view2');
 const listaEspecies = document.getElementById('listaEspecies');
@@ -187,7 +177,7 @@ function showModal(texto, onConfirm){ modalText.textContent = texto; modalCallba
 document.getElementById('modalCancel').addEventListener('click', ()=>{ modalOverlay.classList.remove('show'); modalCallback = null; });
 document.getElementById('modalConfirm').addEventListener('click', ()=>{ modalOverlay.classList.remove('show'); if(modalCallback) modalCallback(); modalCallback = null; });
 
-/* ---------------- vista 2: cámara + IA en vivo ---------------- */
+/* ---------------- CÁMARA Y VARIABLES DE IA ---------------- */
 const video = document.getElementById('video');
 const overlay = document.getElementById('overlay');
 const octx = overlay.getContext('2d');
@@ -199,22 +189,27 @@ const camEspecieLabel = document.getElementById('camEspecieLabel');
 const camArbolLabel = document.getElementById('camArbolLabel');
 const sliderUmbral = document.getElementById('sliderUmbral');
 const umbralTexto = document.getElementById('umbralTexto');
-const selectClase = document.getElementById('selectClase');
 
-let detector = null;
+let session = null;
 let cameraStream = null;
 let loopActivo = false;
-let loopErrorAvisado = false;
+let isProcessing = false;
+
+// Para procesar imágenes a 640x640 (formato YOLO)
+const INPUT_DIM = 640;
+const canvas640 = document.createElement('canvas');
+canvas640.width = INPUT_DIM;
+canvas640.height = INPUT_DIM;
+const ctx640 = canvas640.getContext('2d', { willReadFrequently: true });
 
 /* --- VARIABLES DE TRACKING (ACUMULADOR) --- */
 let globalCount = 0;
 let nextTrackId = 1;
 let activeTracks = [];
-const MAX_DISTANCE = 120; // Píxeles máximos que se puede mover un limón entre frames
-const MAX_MISSED = 8;     // Frames que espera antes de "olvidar" un limón si se tapa
+const MAX_DISTANCE = 0.2; // 20% de la pantalla como tolerancia de movimiento
+const MAX_MISSED = 8;     
 
 sliderUmbral.addEventListener('input', ()=>{ umbralActual = parseFloat(sliderUmbral.value); umbralTexto.textContent = Math.round(umbralActual * 100) + '%'; });
-selectClase.addEventListener('change', ()=>{ claseActual = selectClase.value; resetearTracker(); });
 btnResetConteo.addEventListener('click', ()=>{ resetearTracker(); });
 
 function resetearTracker() {
@@ -232,19 +227,18 @@ async function entrarACamara(especie){
   camEspecieLabel.textContent = especieActual;
   camArbolLabel.textContent = `Árbol ${arbolActualNum}`;
   resetearTracker();
-  loopErrorAvisado = false;
   btnGuardarSiguiente.disabled = true;
-  statusMsg.classList.remove('error');
+  statusMsg.className = 'status';
   statusMsg.textContent = 'Iniciando cámara y modelo…';
   view1.style.display = 'none'; view2.style.display = 'block';
 
   await iniciarCamara();
   await iniciarModelo();
 
-  if(cameraStream && detector){
+  if(cameraStream && session){
     btnGuardarSiguiente.disabled = false;
-    statusMsg.classList.remove('error');
-    statusMsg.textContent = 'Detectando en vivo… (Haz el paneo LENTO)';
+    statusMsg.classList.add('success');
+    statusMsg.textContent = 'Modelo Listo. ¡Detectando!';
     if(!loopActivo){ loopActivo = true; requestAnimationFrame(loopDeteccion); }
   }
 }
@@ -253,7 +247,7 @@ async function iniciarCamara(){
   if(cameraStream) return;
   try{
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 720 }, height: { ideal: 720 } }
+      video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } }
     });
     video.srcObject = cameraStream;
     await new Promise(res => { video.onloadedmetadata = () => { video.play(); res(); }; });
@@ -265,78 +259,99 @@ async function iniciarCamara(){
 }
 
 async function iniciarModelo(){
-  if(detector) return;
+  if(session) return;
   try{
-    const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
-    try{
-      detector = await ObjectDetector.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-        scoreThreshold: 0.1, maxResults: 20, runningMode: "VIDEO"
-      });
-    }catch(gpuErr){
-      detector = await ObjectDetector.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
-        scoreThreshold: 0.1, maxResults: 20, runningMode: "VIDEO"
-      });
-    }
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
+    // Ejecuta el modelo optimizado para WebAssembly
+    session = await ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'] });
   }catch(err){
     statusMsg.classList.add('error');
-    statusMsg.textContent = 'Error cargando MediaPipe. Revisá tu internet.';
+    statusMsg.textContent = 'Error cargando best.onnx. ¿Está en la misma carpeta?';
+    console.error(err);
   }
 }
 
-/* --- FILTRO DE COLOR --- */
-const cropCanvas = document.createElement('canvas');
-const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
-const COLOR_HUE_MIN = 35, COLOR_HUE_MAX = 95, COLOR_SAT_MIN = 20, COLOR_VAL_MIN = 25;
+/* --- FUNCIÓN PRINCIPAL DE VISIÓN --- */
+async function loopDeteccion(){
+  if(!loopActivo) return;
+  requestAnimationFrame(loopDeteccion);
 
-function rgbToHsv(r,g,b){
-  r/=255; g/=255; b/=255;
-  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
-  let h=0;
-  if(d!==0){
-    if(max===r) h=60*(((g-b)/d)%6);
-    else if(max===g) h=60*((b-r)/d+2);
-    else h=60*((r-g)/d+4);
+  // Evitamos saturar el procesador
+  if(isProcessing || !session || video.readyState < 2) return;
+  isProcessing = true;
+
+  try {
+    // 1. Preparar la imagen para la IA (640x640 y dividir por 255)
+    ctx640.drawImage(video, 0, 0, INPUT_DIM, INPUT_DIM);
+    const imgData = ctx640.getImageData(0, 0, INPUT_DIM, INPUT_DIM).data;
+    const float32Data = new Float32Array(3 * INPUT_DIM * INPUT_DIM);
+    
+    // Convertir RGBA a formato CHW [Canal, Alto, Ancho]
+    for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
+      float32Data[j] = imgData[i] / 255.0; // R
+      float32Data[INPUT_DIM * INPUT_DIM + j] = imgData[i + 1] / 255.0; // G
+      float32Data[2 * INPUT_DIM * INPUT_DIM + j] = imgData[i + 2] / 255.0; // B
+    }
+
+    const tensor = new ort.Tensor('float32', float32Data, [1, 3, INPUT_DIM, INPUT_DIM]);
+
+    // 2. Ejecutar Inferencia
+    const results = await session.run({ images: tensor });
+    const output = results[Object.keys(results)[0]].data; // Matriz YOLO plana
+
+    // 3. Post-Procesamiento (Decodificar las 8400 cajas de YOLO)
+    let cajasCandidatas = [];
+    const NUM_CAJAS = 8400;
+
+    for (let i = 0; i < NUM_CAJAS; i++) {
+      // output shape: [1, 5, 8400] -> X, Y, W, H, Confianza
+      let conf = output[4 * NUM_CAJAS + i];
+      if (conf >= umbralActual) {
+        let cx = output[0 * NUM_CAJAS + i];
+        let cy = output[1 * NUM_CAJAS + i];
+        let w = output[2 * NUM_CAJAS + i];
+        let h = output[3 * NUM_CAJAS + i];
+
+        cajasCandidatas.push({
+          x: cx - w/2, y: cy - h/2, w: w, h: h,
+          cx: cx, cy: cy, conf: conf
+        });
+      }
+    }
+
+    // 4. Limpieza (Non-Maximum Suppression) para borrar cajas duplicadas
+    cajasCandidatas.sort((a, b) => b.conf - a.conf);
+    let cajasFinales = [];
+    while (cajasCandidatas.length > 0) {
+      let best = cajasCandidatas.shift();
+      cajasFinales.push(best);
+      cajasCandidatas = cajasCandidatas.filter(box => calcularIoU(best, box) < 0.45);
+    }
+
+    // 5. Enviar a tu Tracker Acumulador
+    procesarTracks(cajasFinales);
+    dibujarBoundingBoxes();
+
+  } catch (err) {
+    console.error("Error procesando frame:", err);
   }
-  if(h<0) h+=360;
-  return [h, (max===0?0:d/max)*100, max*100];
-}
-
-function cajaPareceFruto(box){
-  const x = Math.max(0, Math.round(box.originX));
-  const y = Math.max(0, Math.round(box.originY));
-  const w = Math.min(video.videoWidth - x, Math.round(box.width));
-  const h = Math.min(video.videoHeight - y, Math.round(box.height));
-  if(w <= 0 || h <= 0) return true; 
-
-  cropCanvas.width = 24; cropCanvas.height = 24;
-  cropCtx.drawImage(video, x, y, w, h, 0, 0, 24, 24);
-  const data = cropCtx.getImageData(0, 0, 24, 24).data;
-  let pixelesFruta = 0, total = 0;
-  for(let i=0; i<data.length; i+=4){
-    const [hh,ss,vv] = rgbToHsv(data[i], data[i+1], data[i+2]);
-    total++;
-    if(hh>=COLOR_HUE_MIN && hh<=COLOR_HUE_MAX && ss>=COLOR_SAT_MIN && vv>=COLOR_VAL_MIN) pixelesFruta++;
-  }
-  return total>0 && (pixelesFruta/total) >= 0.25; 
+  isProcessing = false;
 }
 
 /* --- LÓGICA DE TRACKING (ACUMULACIÓN) --- */
 function procesarTracks(detecciones) {
-  // 1. Extraer centroides (centro exacto) de lo que la IA ve AHORA
   let currentCentroids = detecciones.map(d => {
+    // Normalizamos coordenadas entre 0 y 1 para facilitar el cálculo
     return {
-      x: d.boundingBox.originX + (d.boundingBox.width / 2),
-      y: d.boundingBox.originY + (d.boundingBox.height / 2),
-      box: d.boundingBox,
-      score: d.categories[0].score
+      x: d.cx / INPUT_DIM,
+      y: d.cy / INPUT_DIM,
+      box: d,
+      score: d.conf
     };
   });
 
   let matchedDetectionIndices = new Set();
   
-  // 2. Intentar emparejar la memoria con lo que vemos ahora
   for (let i = 0; i < activeTracks.length; i++) {
     let track = activeTracks[i];
     let bestDist = MAX_DISTANCE;
@@ -346,7 +361,6 @@ function procesarTracks(detecciones) {
       if (matchedDetectionIndices.has(j)) continue;
       let det = currentCentroids[j];
       
-      // Teorema de pitágoras para ver distancia entre puntos
       let dist = Math.hypot(track.x - det.x, track.y - det.y);
       if (dist < bestDist) {
         bestDist = dist;
@@ -355,91 +369,61 @@ function procesarTracks(detecciones) {
     }
 
     if (bestDetIdx !== -1) {
-      // ¡Encontramos el limón que ya estábamos siguiendo!
       track.x = currentCentroids[bestDetIdx].x;
       track.y = currentCentroids[bestDetIdx].y;
       track.box = currentCentroids[bestDetIdx].box;
       track.score = currentCentroids[bestDetIdx].score;
-      track.missed = 0; // Resetear el contador de pérdida
+      track.missed = 0; 
       matchedDetectionIndices.add(bestDetIdx);
     } else {
-      // No lo vemos... sumamos error
       track.missed++;
     }
   }
 
-  // 3. Borrar de la memoria los limones que ya se salieron de la pantalla por completo
   activeTracks = activeTracks.filter(t => t.missed < MAX_MISSED);
 
-  // 4. Registrar limones NUEVOS que acaban de entrar a la pantalla
   for (let j = 0; j < currentCentroids.length; j++) {
     if (!matchedDetectionIndices.has(j)) {
       activeTracks.push({
         id: nextTrackId++,
-        x: currentCentroids[j].x,
-        y: currentCentroids[j].y,
-        box: currentCentroids[j].box,
-        score: currentCentroids[j].score,
-        missed: 0
+        x: currentCentroids[j].x, y: currentCentroids[j].y,
+        box: currentCentroids[j].box, score: currentCentroids[j].score, missed: 0
       });
-      globalCount++; // ¡SUMAMOS AL TOTAL GENERAL!
+      globalCount++; 
       liveCountNum.textContent = globalCount;
     }
   }
 }
 
-const INTERVALO_DETECCION_MS = 60; 
-let ultimaDeteccionTs = 0;
-
-function loopDeteccion(ahora){
-  if(!loopActivo) return;
-  requestAnimationFrame(loopDeteccion);
-
-  if(!ahora || ahora - ultimaDeteccionTs < INTERVALO_DETECCION_MS) return;
-  ultimaDeteccionTs = ahora;
-
-  if(detector && video.readyState >= 2){
-    try{
-      const resultado = detector.detectForVideo(video, performance.now());
-      const validas = (resultado.detections || []).filter(d=>{
-        const cat = d.categories[0];
-        if(!cat || cat.categoryName !== claseActual || cat.score < umbralActual) return false;
-        return cajaPareceFruto(d.boundingBox);
-      });
-      
-      procesarTracks(validas);
-      dibujarBoundingBoxes();
-      loopErrorAvisado = false;
-    }catch(err){
-      if(!loopErrorAvisado){
-        statusMsg.classList.add('error');
-        statusMsg.textContent = 'El modelo dejó de responder. Revisa la consola.';
-        loopErrorAvisado = true;
-      }
-    }
-  }
+function calcularIoU(boxA, boxB) {
+  let xA = Math.max(boxA.x, boxB.x);
+  let yA = Math.max(boxA.y, boxB.y);
+  let xB = Math.min(boxA.x + boxA.w, boxB.x + boxB.w);
+  let yB = Math.min(boxA.y + boxA.h, boxB.y + boxB.h);
+  let interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA);
+  let boxAArea = boxA.w * boxA.h;
+  let boxBArea = boxB.w * boxB.h;
+  return interArea / (boxAArea + boxBArea - interArea);
 }
 
 function dibujarBoundingBoxes(){
   octx.clearRect(0, 0, overlay.width, overlay.height);
   octx.lineWidth = 3; octx.font = 'bold 16px sans-serif';
   
-  const scaleX = overlay.width / video.videoWidth;
-  const scaleY = overlay.height / video.videoHeight;
+  const scaleX = overlay.width / INPUT_DIM;
+  const scaleY = overlay.height / INPUT_DIM;
 
-  // Dibujamos solo los tracks que están activos y visibles
   activeTracks.forEach(track => {
-    if(track.missed > 0) return; // Si no lo vemos este milisegundo exacto, no lo dibujamos
+    if(track.missed > 0) return; 
     
-    const x = track.box.originX * scaleX;
-    const y = track.box.originY * scaleY;
-    const w = track.box.width * scaleX;
-    const h = track.box.height * scaleY;
+    const x = track.box.x * scaleX;
+    const y = track.box.y * scaleY;
+    const w = track.box.w * scaleX;
+    const h = track.box.h * scaleY;
     
     octx.strokeStyle = '#39FF6A'; 
     octx.strokeRect(x, y, w, h);
     
-    // Le ponemos el ID encima para que sepas que lo está rastreando bien
     const etiqueta = `#${track.id} ${Math.round(track.score * 100)}%`;
     const tw = octx.measureText(etiqueta).width;
     octx.fillStyle = '#39FF6A'; octx.fillRect(x, y - 20, tw + 8, 20);
