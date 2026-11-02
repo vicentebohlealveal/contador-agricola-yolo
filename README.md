@@ -22,6 +22,10 @@ Sirve la carpeta por HTTPS o `localhost`; los navegadores normalmente no permite
 - El postprocesamiento está escrito para una salida YOLO concreta (`[1,5,8400]`). Debe validarse contra el modelo real antes de presentar el conteo como fiable.
 - El sistema acumula tracks mediante proximidad de centroides; en paneos reales puede contar frutos dos veces o perder detecciones. Debe validarse experimentalmente con datos de campo.
 
+## Historial de versiones
+
+La rama [`historial`](https://github.com/vicentebohlealveal/contador-agricola-yolo/tree/historial) reconstruye, commit por commit, cómo evolucionó el programa a partir de las versiones que quedaron guardadas. El resumen está en [`VERSIONES.md`](https://github.com/vicentebohlealveal/contador-agricola-yolo/blob/historial/VERSIONES.md).
+
 ## Licencia / License
 
 © 2026 Vicente Bohle Alveal. Todos los derechos reservados / All rights reserved. Público solo para revisión como portafolio; ver [LICENSE](LICENSE).
