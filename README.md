@@ -7,9 +7,9 @@
 
 Aplicación web para cámara y conteo acumulativo por árbol mediante un modelo YOLO convertido a ONNX. La inferencia se ejecuta en el navegador con ONNX Runtime Web y el conteo se guarda en `localStorage` del dispositivo.
 
-## Falta un archivo necesario
+## Modelo
 
-El código busca `./best.onnx`. El HTML incluido **no funcionará como detector hasta incorporar el modelo real** con el nombre exacto `best.onnx` en esta misma carpeta. No se ha creado un modelo de reemplazo. Antes de añadirlo a GitHub, comprueba tamaño, licencia/derechos de uso y que no contenga materiales confidenciales. Si excede los límites de GitHub, estudia Git LFS o alojamiento apropiado.
+`best.onnx` es un modelo **YOLO11s** entrenado por el autor con un conjunto de imágenes de limones (una clase, `lemon`), exportado a ONNX con Ultralytics el 26 de agosto de 2026. Entrada `[1, 3, 640, 640]`, salida `[1, 5, 8400]`; pesa 38 MB. El modelo también está cubierto por la licencia de este repositorio.
 
 ## Ejecución
 
